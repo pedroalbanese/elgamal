@@ -9,7 +9,7 @@ Usage of elgamal:
   -decrypt
         Enable decryption
   -message string
-        Message to encrypt (default "hello world")
+        Message to encrypt
   -primesize string
         Size of the prime number (512, 768, 1024) (default "1024")
   -privatekey string
