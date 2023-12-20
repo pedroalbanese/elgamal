@@ -1,7 +1,7 @@
 # elgamal
-### ElGamal Tool 
+### ElGamal Command-line Tool 
 
-## Usage:
+## Usage
 ```
 Usage of elgamal:
   -ciphertext string
