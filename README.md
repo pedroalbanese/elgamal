@@ -1,5 +1,5 @@
 # elgamal
-### ElGamal Command-line Tool 
+### ElGamal Cryptosystem Command-line Tool written in Go
 
 ## Usage
 ```
