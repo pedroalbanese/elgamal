@@ -56,8 +56,10 @@ func encrypt(random io.Reader, pub *PublicKey, msg []byte) (ciphertext string, e
 	b := s.Mul(s, m)
 	b.Mod(b, pub.P)
 
-	// Concatenate a and b as strings
-	ciphertext = fmt.Sprintf("%X%X", a, b)
+	aHex := fmt.Sprintf("%0*x", (pub.P.BitLen())/4, a)
+	bHex := fmt.Sprintf("%0*x", (pub.P.BitLen())/4, b)
+
+	ciphertext = aHex + bHex
 
 	return ciphertext, nil
 }
@@ -118,7 +120,7 @@ func main() {
 	if *calculatePublicKey {
 		// Calculate public key only
 		publicKey := setup(xval, g, p)
-		fmt.Printf("Public Key (Y): %X\n", publicKey)
+		fmt.Printf("Public Key (Y): %x\n", publicKey)
 		return
 	}
 
@@ -156,7 +158,7 @@ func main() {
 		}
 
 		// Print encrypted message
-		fmt.Printf("%s\n", c)
+		fmt.Printf("Cipher: %s\n", c)
 	} else {
 		// Decrypt the message
 		ciphertext := *ciph
