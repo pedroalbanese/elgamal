@@ -19,7 +19,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
 )
 
 var (
@@ -35,7 +34,6 @@ var (
 	text       = flag.Bool("text", false, "Print keys contents.")
 	unwrapkey  = flag.Bool("unwrapkey", false, "Unwrap symmetric key.")
 	wrapkey    = flag.Bool("wrapkey", false, "Wrap symmetric key.")
-
 )
 
 func main() {
