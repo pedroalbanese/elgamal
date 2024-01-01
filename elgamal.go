@@ -23,18 +23,18 @@ import (
 )
 
 var (
-	text       = flag.Bool("text", false, "Print keys contends.")
-	keygen     = flag.Bool("keygen", false, "Generate asymmetric keypair.")
-	paramgen   = flag.Bool("setup", false, "Generate public params.")
-	wrapkey    = flag.Bool("wrapkey", false, "Wrap symmetric key.")
-	unwrapkey  = flag.Bool("unwrapkey", false, "Unwrap symmetric key.")
-	params     = flag.String("params", "", "ElGamal Public Parameters path.")
-	pub        = flag.String("pub", "Public.pem", "Public key path.")
-	priv       = flag.String("priv", "Private.pem", "Private key path.")
 	cph        = flag.String("cipher", "", "Ciphertext to unwrap.")
 	key        = flag.String("key", "", "Public or Private key, depending on operation.")
+	keygen     = flag.Bool("keygen", false, "Generate asymmetric keypair.")
 	length     = flag.Int("bits", 0, "Key length. (for setup and wrapkey)")
+	paramgen   = flag.Bool("setup", false, "Generate public params.")
+	params     = flag.String("params", "", "ElGamal Public Parameters path.")
+	priv       = flag.String("priv", "Private.pem", "Private key path.")
+	pub        = flag.String("pub", "Public.pem", "Public key path.")
 	pwd        = flag.String("pass", "", "Passphrase. (for Private key PEM encryption)")
+	text       = flag.Bool("text", false, "Print keys contents.")
+	unwrapkey  = flag.Bool("unwrapkey", false, "Unwrap symmetric key.")
+	wrapkey    = flag.Bool("wrapkey", false, "Wrap symmetric key.")
 
 )
 
