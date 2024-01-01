@@ -31,6 +31,29 @@ Usage of elgamal:
         Wrap symmetric key.
 ```
 
+## Example
+- **Generate Public Parameters**
+```
+go run elgamal.go -setup -bits 2048 > SchnorrParams.pem
+```
+- **Generate Asymmetric Keypair**
+```
+go run elgamal.go -keygen -params SchnorrParams.pem -priv Private.pem -pass <passphrase> -pub Public.pem
+```
+- **Wrap a Symmetric Key**
+```
+go run elgamal.go -wrapkey -key Public.pem
+```
+- **Unwrap a Symmetric Key**
+```
+go run elgamal.go -unwrapkey -params SchnorrParams.pem -key Private.pem -cipher <ciphertext>
+```
+- **Display Key Contents**
+```
+go run elgamal.go -text -key Private.pem -pass <passphrase>
+go run elgamal.go -text -key Public.pem
+go run elgamal.go -text -params SchnorrParams.pem
+```
 ## License
 This project is licensed under the ISC License.
 
