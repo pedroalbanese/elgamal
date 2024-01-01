@@ -10,11 +10,11 @@ Usage of elgamal:
   -cipher string
         Ciphertext to unwrap.
   -key string
-        Public or Private key, depending on operation.
+        Public or private key, depending on operation.
   -keygen
         Generate asymmetric keypair.
   -params string
-        ElGamal Public Parameters path.
+        ElGamal public Parameters path.
   -pass string
         Passphrase. (for Private key PEM encryption)
   -priv string
@@ -26,9 +26,9 @@ Usage of elgamal:
   -text
         Print keys contents.
   -unwrapkey
-        Unwrap symmetric key.
+        Unwrap symmetric key with private key.
   -wrapkey
-        Wrap symmetric key.
+        Wrap symmetric key with public key.
 ```
 
 ## Example
