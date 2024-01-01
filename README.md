@@ -14,7 +14,7 @@ Usage of elgamal:
   -keygen
         Generate asymmetric keypair.
   -params string
-        ElGamal public Parameters path.
+        ElGamal public parameters path.
   -pass string
         Passphrase. (for Private key PEM encryption)
   -priv string
