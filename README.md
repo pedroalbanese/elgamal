@@ -5,20 +5,30 @@ The ElGamal algorithm is a public-key cryptography system that enables secure co
 ## Usage
 ```
 Usage of elgamal:
-  -ciphertext string
-        Ciphertext for decryption
-  -decrypt
-        Enable decryption
-  -message string
-        Message to encrypt
-  -primesize string
-        Size of the prime number (512, 768, 1024) (default "1024")
-  -privatekey string
-        Private key value (x) (default "40")
-  -publickey string
-        Public key value (Y) for encryption
+  -bits int
+        Key length. (for setup and wrapkey)
+  -cipher string
+        Ciphertext to unwrap.
+  -key string
+        Public or Private key, depending on operation.
+  -keygen
+        Generate asymmetric keypair.
+  -params string
+        ElGamal Public Parameters path.
+  -pass string
+        Passphrase. (for Private key PEM encryption)
+  -priv string
+        Private key path. (default "Private.pem")
+  -pub string
+        Public key path. (default "Public.pem")
   -setup
-        Calculate public key only
+        Generate public params.
+  -text
+        Print keys contents.
+  -unwrapkey
+        Unwrap symmetric key.
+  -wrapkey
+        Wrap symmetric key.
 ```
 
 ## License
