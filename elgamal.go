@@ -267,52 +267,52 @@ func main() {
 	}
 
 	if *keygen {
-			var xval *big.Int
-			var path string
+		var xval *big.Int
+		var path string
 
-			readParams, err := readSchnorrParamsFromPEM(*params)
-			if err != nil {
-				log.Fatal("Error reading Schnorr parameters from PEM file:", err)
-				return
-			}
-
-			if *key == "" {
-				xval, err = generateRandomX(readParams.P)
-				if err != nil {
-					log.Fatal("Error generating x:", err)
-					return
-				}
-				path, err = filepath.Abs(*priv)
-				fmt.Printf("Private Key save to: %s\n", path)
-				privateKey := &PrivateKey{
-					X: xval,
-					P: readParams.P,
-					G: readParams.G,
-				}
-				if err := savePrivateKeyToPEM(*priv, privateKey); err != nil {
-					log.Fatal("Error saving private key:", err)
-					return
-				}
-			} else {
-				priv, err := readPrivateKeyFromPEM(*key)
-				if err != nil {
-					log.Fatal("Error reading private key:", err)
-					return
-				}
-				xval = new(big.Int).Set(priv.X)
-			}
-
-			publicKey := setup(xval, readParams.G, readParams.P)
-
-			path, err = filepath.Abs(*pub)
-			fmt.Printf("Public Key save to: %s\n", path)
-			if err := savePublicKeyToPEM(*pub, &PublicKey{Y: publicKey, G: readParams.G, P: readParams.P}); err != nil {
-				log.Fatal("Error saving public key:", err)
-				return
-			}
-
+		readParams, err := readSchnorrParamsFromPEM(*params)
+		if err != nil {
+			log.Fatal("Error reading Schnorr parameters from PEM file:", err)
 			return
 		}
+
+		if *key == "" {
+			xval, err = generateRandomX(readParams.P)
+			if err != nil {
+				log.Fatal("Error generating x:", err)
+				return
+			}
+			path, err = filepath.Abs(*priv)
+			fmt.Printf("Private Key save to: %s\n", path)
+			privateKey := &PrivateKey{
+				X: xval,
+				P: readParams.P,
+				G: readParams.G,
+			}
+			if err := savePrivateKeyToPEM(*priv, privateKey); err != nil {
+				log.Fatal("Error saving private key:", err)
+				return
+			}
+		} else {
+			priv, err := readPrivateKeyFromPEM(*key)
+			if err != nil {
+				log.Fatal("Error reading private key:", err)
+				return
+			}
+			xval = new(big.Int).Set(priv.X)
+		}
+
+		publicKey := setup(xval, readParams.G, readParams.P)
+
+		path, err = filepath.Abs(*pub)
+		fmt.Printf("Public Key save to: %s\n", path)
+		if err := savePublicKeyToPEM(*pub, &PublicKey{Y: publicKey, G: readParams.G, P: readParams.P}); err != nil {
+			log.Fatal("Error saving public key:", err)
+			return
+		}
+
+		return
+	}
 }
 
 
