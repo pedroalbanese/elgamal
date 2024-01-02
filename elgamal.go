@@ -23,17 +23,18 @@ import (
 
 var (
 	cph        = flag.String("cipher", "", "Ciphertext to unwrap.")
-	key        = flag.String("key", "", "Public or Private key, depending on operation.")
+	key        = flag.String("key", "", "Public or private key, depending on operation.")
 	keygen     = flag.Bool("keygen", false, "Generate asymmetric keypair.")
 	length     = flag.Int("bits", 0, "Key length. (for setup and wrapkey)")
 	paramgen   = flag.Bool("setup", false, "Generate public params.")
-	params     = flag.String("params", "", "ElGamal Public Parameters path.")
+	params     = flag.String("params", "", "ElGamal public parameters path.")
 	priv       = flag.String("priv", "Private.pem", "Private key path.")
 	pub        = flag.String("pub", "Public.pem", "Public key path.")
 	pwd        = flag.String("pass", "", "Passphrase. (for Private key PEM encryption)")
 	text       = flag.Bool("text", false, "Print keys contents.")
-	unwrapkey  = flag.Bool("unwrapkey", false, "Unwrap symmetric key.")
-	wrapkey    = flag.Bool("wrapkey", false, "Wrap symmetric key.")
+	unwrapkey  = flag.Bool("unwrapkey", false, "Unwrap symmetric key with private key.")
+	wrapkey    = flag.Bool("wrapkey", false, "Wrap symmetric key with public key.")
+	modulus    = flag.Bool("modulus", false, "Display the public key modulus.")
 )
 
 func main() {
@@ -78,18 +79,46 @@ func main() {
 			fmt.Println("Error reading private key:", err)
 			return
 		}
-		pemBlock := &pem.Block{
-			Type:  "ELGAMAL PRIVATE KEY",
-			Bytes: priv.Bytes(),
+		privPEM := &PrivateKey{
+			X: priv.X,
+			P: priv.P,
+			G: priv.G,
 		}
 
-		// Codifica o bloco PEM em formato PEM
+		privBytes, err := encodePrivateKeyPEM(privPEM)
+		if err != nil {
+			return
+		}
+		pemBlock := &pem.Block{
+			Type:  "ELGAMAL PRIVATE KEY",
+			Bytes: privBytes,
+		}
+
 		pemData := pem.EncodeToMemory(pemBlock)
 		fmt.Print(string(pemData))
-		xval := new(big.Int).Set(priv)
+		xval := new(big.Int).Set(priv.X)
 		fmt.Println("PrivateKey(x):")
 		x := fmt.Sprintf("%x", xval)
 		splitz := SplitSubN(x, 2)
+		for _, chunk := range split(strings.Trim(fmt.Sprint(splitz), "[]"), 45) {
+			fmt.Printf("    %-10s    \n", strings.ReplaceAll(chunk, " ", ":"))
+		}
+		fmt.Println("Prime(p):")
+		p := fmt.Sprintf("%x", priv.P)
+		splitz = SplitSubN(p, 2)
+		for _, chunk := range split(strings.Trim(fmt.Sprint(splitz), "[]"), 45) {
+			fmt.Printf("    %-10s    \n", strings.ReplaceAll(chunk, " ", ":"))
+		}
+		fmt.Println("Generatot(g):")
+		g := fmt.Sprintf("%x", priv.G)
+		splitz = SplitSubN(g, 2)
+		for _, chunk := range split(strings.Trim(fmt.Sprint(splitz), "[]"), 45) {
+			fmt.Printf("    %-10s    \n", strings.ReplaceAll(chunk, " ", ":"))
+		}
+		fmt.Println("PublicKey(y):")
+		publicKey := setup(priv.X, priv.G, priv.P)
+		pub := fmt.Sprintf("%x", publicKey)
+		splitz = SplitSubN(pub, 2)
 		for _, chunk := range split(strings.Trim(fmt.Sprint(splitz), "[]"), 45) {
 			fmt.Printf("    %-10s    \n", strings.ReplaceAll(chunk, " ", ":"))
 		}
@@ -128,6 +157,25 @@ func main() {
 		}
 		return
 	}
+	if *modulus && blockType == "ELGAMAL PRIVATE KEY" {
+		privKey, err := readPrivateKeyFromPEM(*key)
+		if err != nil {
+			fmt.Println("Error reading private key:", err)
+			return
+		}
+		publicKey := setup(privKey.X, privKey.G, privKey.P)
+		fmt.Printf("Y=%X\n", publicKey)
+		return
+	}
+	if *modulus && blockType == "ELGAMAL PUBLIC KEY" {
+		publicKey, err := readPublicKeyFromPEM(*key)
+		if err != nil {
+			fmt.Println("Error reading public key:", err)
+			return
+		}
+		fmt.Printf("Y=%X\n", publicKey.Y)
+		return
+	}
 	if *wrapkey {
 		if *length == 0 {
 			*length = 256
@@ -161,13 +209,35 @@ func main() {
 		fmt.Printf("Shared= %x\n", messageBytes)
 		os.Exit(0)
 	}
-	readParams, err := readSchnorrParamsFromPEM(*params)
-	if err != nil {
-		fmt.Println("Error reading Schnorr parameters from PEM file:", err)
-		return
+
+	if *unwrapkey {
+		if *key == "" {
+			fmt.Println("Error: Private key file not provided for unwrapping.")
+			return
+		}
+
+		priv, err := readPrivateKeyFromPEM(*key)
+		if err != nil {
+			fmt.Println("Error reading private key:", err)
+			return
+		}
+
+		ciphertext := *cph
+		message, err := decrypt(priv, ciphertext)
+		if err != nil {
+			fmt.Println("Error decrypting message:", err)
+			return
+		}
+		fmt.Printf("Shared= %x\n", message)
 	}
 
 	if *text {
+		readParams, err := readSchnorrParamsFromPEM(*params)
+		if err != nil {
+			fmt.Println("Error reading Schnorr parameters from PEM file:", err)
+			return
+		}
+
 		pemData, err := ioutil.ReadFile(*params)
 		if err != nil {
 			fmt.Println("Error reading PEM file:", err)
@@ -196,57 +266,53 @@ func main() {
 		os.Exit(0)
 	}
 
-	var xval *big.Int
-	var path string
-	if *key == "" {
-//			xval, err = generateRandomX(p)
-		xval, err = generateRandomX(readParams.P)
-		if err != nil {
-			fmt.Println("Error generating x:", err)
-			return
-		}
-		path, err = filepath.Abs(*priv)
-		fmt.Printf("Private Key save to: %s\n", path)
-		if err := savePrivateKeyToPEM(*priv, &PrivateKey{X: xval, PublicKey: PublicKey{G: readParams.G, P: readParams.P}}); err != nil {
-			fmt.Println("Error saving private key:", err)
-			return
-		}
-	} else {
-		priv, err := readPrivateKeyFromPEM(*key)
-		if err != nil {
-			fmt.Println("Error reading private key:", err)
-			return
-		}
-		xval = new(big.Int).Set(priv)
-	}
 	if *keygen {
-		publicKey := setup(xval, readParams.G, readParams.P)
-		path, err = filepath.Abs(*pub)
-		fmt.Printf("Public Key save to: %s\n", path)
-		if err := savePublicKeyToPEM(*pub, &PublicKey{Y: publicKey, G: readParams.G, P: readParams.P}); err != nil {
-			fmt.Println("Error saving public key:", err)
+			var xval *big.Int
+			var path string
+
+			readParams, err := readSchnorrParamsFromPEM(*params)
+			if err != nil {
+				log.Fatal("Error reading Schnorr parameters from PEM file:", err)
+				return
+			}
+
+			if *key == "" {
+				xval, err = generateRandomX(readParams.P)
+				if err != nil {
+					log.Fatal("Error generating x:", err)
+					return
+				}
+				path, err = filepath.Abs(*priv)
+				fmt.Printf("Private Key save to: %s\n", path)
+				privateKey := &PrivateKey{
+					X: xval,
+					P: readParams.P,
+					G: readParams.G,
+				}
+				if err := savePrivateKeyToPEM(*priv, privateKey); err != nil {
+					log.Fatal("Error saving private key:", err)
+					return
+				}
+			} else {
+				priv, err := readPrivateKeyFromPEM(*key)
+				if err != nil {
+					log.Fatal("Error reading private key:", err)
+					return
+				}
+				xval = new(big.Int).Set(priv.X)
+			}
+
+			publicKey := setup(xval, readParams.G, readParams.P)
+
+			path, err = filepath.Abs(*pub)
+			fmt.Printf("Public Key save to: %s\n", path)
+			if err := savePublicKeyToPEM(*pub, &PublicKey{Y: publicKey, G: readParams.G, P: readParams.P}); err != nil {
+				log.Fatal("Error saving public key:", err)
+				return
+			}
+
 			return
 		}
-		return
-	}
-	publicKey := setup(xval, readParams.G, readParams.P)
-	priv := &PrivateKey{
-		PublicKey: PublicKey{
-			G: readParams.G,
-			P: readParams.P,
-			Y: publicKey,
-		},
-		X: xval,
-	}
-	if *unwrapkey {
-		ciphertext := *cph
-		message, err := decrypt(priv, ciphertext)
-		if err != nil {
-			fmt.Println("Error decrypting message:", err)
-			return
-		}
-		fmt.Printf("Shared= %x\n", message)
-	}
 }
 
 
@@ -261,6 +327,8 @@ type PublicKey struct {
 
 type PrivateKey struct {
 	PublicKey
+	P *big.Int
+	G *big.Int
 	X *big.Int
 }
 
@@ -309,8 +377,17 @@ func decrypt(priv *PrivateKey, ciphertext string) (msg []byte, err error) {
 	return em, nil
 }
 
-func savePrivateKeyToPEM(fileName string, priv *PrivateKey) error {
-	privBytes := priv.X.Bytes()
+func savePrivateKeyToPEM(fileName string, privKey *PrivateKey) error {
+	privPEM := &PrivateKey{
+		X: privKey.X,
+		P: privKey.P,
+		G: privKey.G,
+	}
+
+	privBytes, err := encodePrivateKeyPEM(privPEM)
+	if err != nil {
+		return err
+	}
 
 	block := &pem.Block{
 		Type:  "ELGAMAL PRIVATE KEY",
@@ -320,26 +397,33 @@ func savePrivateKeyToPEM(fileName string, priv *PrivateKey) error {
 	return savePEMToFile(fileName, block, *pwd != "")
 }
 
-func readPrivateKeyFromPEM(fileName string) (*big.Int, error) {
-	file, err := os.Open(fileName)
+func encodePrivateKeyPEM(privPEM *PrivateKey) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(privPEM)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
 
-	pemData, err := io.ReadAll(file)
+	return buf.Bytes(), nil
+}
+
+func readPrivateKeyFromPEM(fileName string) (*PrivateKey, error) {
+	pemData, err := ioutil.ReadFile(fileName)
 	if err != nil {
 		return nil, err
 	}
 
 	block, _ := pem.Decode(pemData)
 	if block == nil {
-		return nil, fmt.Errorf("failed to decode PEM block")
+		return nil, errors.New("failed to decode PEM block")
 	}
 
-	// Check if the PEM block is encrypted
+	if block.Type != "ELGAMAL PRIVATE KEY" {
+		return nil, errors.New("unexpected PEM block type")
+	}
+
 	if block.Headers["Proc-Type"] == "4,ENCRYPTED" {
-		// Decrypt private key if key is provided
 		if *pwd == "" {
 			return nil, fmt.Errorf("private key is encrypted, but no decryption key provided")
 		}
@@ -348,10 +432,27 @@ func readPrivateKeyFromPEM(fileName string) (*big.Int, error) {
 		if err != nil {
 			return nil, err
 		}
-		return new(big.Int).SetBytes(privBytes), nil
+
+		var privKey PrivateKey
+		buf := bytes.NewReader(privBytes)
+		dec := gob.NewDecoder(buf)
+		err = dec.Decode(&privKey)
+		if err != nil {
+			return nil, err
+		}
+
+		return &privKey, nil
 	}
 
-	return new(big.Int).SetBytes(block.Bytes), nil
+	var privKey PrivateKey
+	buf := bytes.NewReader(block.Bytes)
+	dec := gob.NewDecoder(buf)
+	err = dec.Decode(&privKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return &privKey, nil
 }
 
 func savePublicKeyToPEM(fileName string, pub *PublicKey) error {
@@ -699,7 +800,7 @@ func encryptBlock(block *pem.Block, key []byte) *pem.Block {
 		Bytes: encryptedBytes,
 		Headers: map[string]string{
 			"Proc-Type": "4,ENCRYPTED",
-			"DEK-Info":  fmt.Sprintf("%s,%s", strings.ToUpper(*cph), nonceHex),
+			"DEK-Info":  fmt.Sprintf("%s,%s", "AES", nonceHex),
 		},
 	}
 	return newBlock
