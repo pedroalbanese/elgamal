@@ -38,7 +38,7 @@ go run elgamal.go -setup -bits 2048 > SchnorrParams.pem
 ```
 - **Generate Asymmetric Keypair**
 ```
-go run elgamal.go -keygen -params SchnorrParams.pem -priv Private.pem -pass <passphrase> -pub Public.pem
+go run elgamal.go -keygen -params SchnorrParams.pem [-priv Private.pem] [-pass <passphrase>] [-pub Public.pem]
 ```
 - **Wrap a Symmetric Key**
 ```
@@ -46,7 +46,7 @@ go run elgamal.go -wrapkey -key Public.pem
 ```
 - **Unwrap a Symmetric Key**
 ```
-go run elgamal.go -unwrapkey -params SchnorrParams.pem -key Private.pem -cipher <ciphertext>
+go run elgamal.go -unwrapkey -key Private.pem [-pass <passphrase>] -cipher <ciphertext>
 ```
 - **Display Key Contents**
 ```
