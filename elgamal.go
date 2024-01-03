@@ -26,15 +26,19 @@ var (
 	key        = flag.String("key", "", "Public or private key, depending on operation.")
 	keygen     = flag.Bool("keygen", false, "Generate asymmetric keypair.")
 	length     = flag.Int("bits", 0, "Key length. (for setup and wrapkey)")
+	modulus    = flag.Bool("modulus", false, "Display the public key modulus.")
 	paramgen   = flag.Bool("setup", false, "Generate public params.")
 	params     = flag.String("params", "", "ElGamal public parameters path.")
 	priv       = flag.String("priv", "Private.pem", "Private key path.")
 	pub        = flag.String("pub", "Public.pem", "Public key path.")
 	pwd        = flag.String("pass", "", "Passphrase. (for Private key PEM encryption)")
+	sig        = flag.String("signature", "", "Signature S.")
+	sign       = flag.Bool("sign", false, "Sign message with private key.")
+	sigr       = flag.String("rsign", "", "Signature R.")
 	text       = flag.Bool("text", false, "Print keys contents.")
 	unwrapkey  = flag.Bool("unwrapkey", false, "Unwrap symmetric key with private key.")
+	verify     = flag.Bool("verify", false, "Verify signature with public key.")
 	wrapkey    = flag.Bool("wrapkey", false, "Wrap symmetric key with public key.")
-	modulus    = flag.Bool("modulus", false, "Display the public key modulus.")
 )
 
 func main() {
@@ -45,6 +49,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Usage of", os.Args[0]+":")
 		flag.PrintDefaults()
 		os.Exit(3)
+	}
+
+	inputfile, err := os.Open(flag.Arg(0))
+	if err != nil {
+		log.Fatalf("failed opening file: %s", err)
 	}
 
 	if *paramgen {
@@ -313,6 +322,58 @@ func main() {
 
 		return
 	}
+	if *sign {
+		message, err := ioutil.ReadAll(inputfile)
+		if err != nil {
+			fmt.Println("Error reading file:", err)
+			return
+		}
+
+		priv, err := readPrivateKeyFromPEM(*key)
+		if err != nil {
+			fmt.Println("Error reading private key:", err)
+			return
+		}
+
+		r, s, err := signElGamal(priv, message)
+		if err != nil {
+			log.Fatal("Error signing message:", err)
+			return
+		}
+
+		fmt.Println("R=", r)
+		fmt.Println("S=", s)
+	}
+	if *verify {
+		message, err := ioutil.ReadAll(inputfile)
+		if err != nil {
+			fmt.Println("Error reading file:", err)
+			return
+		}
+
+		if *key == "" {
+			fmt.Println("Error: Public key file not provided for verification.")
+			return
+		}
+
+		r := *sigr
+		s := *sig
+
+		publicKeyVal, err := readPublicKeyFromPEM(*key)
+		if err != nil {
+			fmt.Println("Error: Invalid public key value")
+			return
+		}
+
+		pub := &PublicKey{
+			G: publicKeyVal.G,
+			P: publicKeyVal.P,
+			Y: publicKeyVal.Y,
+		}
+
+		isValid := verifyElGamal(pub, message, r, s)
+		fmt.Println("Signature verification:", isValid)
+	}
 }
 
 
@@ -375,6 +436,84 @@ func decrypt(priv *PrivateKey, ciphertext string) (msg []byte, err error) {
 	em := s.Bytes()
 
 	return em, nil
+}
+
+// Sign a message using ElGamal
+func signElGamal(privateKey *PrivateKey, message []byte) (r, s string, err error) {
+	for {
+		// Choose a random value k in the range [1, p-2]
+		k, err := rand.Int(rand.Reader, new(big.Int).Sub(privateKey.P, big.NewInt(2)))
+		if err != nil {
+			return "", "", fmt.Errorf("failed to generate random number: %v", err)
+		}
+
+		// Ensure k is not zero
+		if k.Sign() == 0 {
+			k = big.NewInt(1)
+		}
+
+		// Check if k is relatively prime to (p-1)
+		if new(big.Int).GCD(nil, nil, k, new(big.Int).Sub(privateKey.P, big.NewInt(1))).Cmp(big.NewInt(1)) == 0 {
+			// Compute r = g^k mod p
+			rBigInt := new(big.Int).Exp(privateKey.G, k, privateKey.P)
+			rBigInt.Mod(rBigInt, privateKey.P)
+			r = fmt.Sprintf("%X", rBigInt)
+
+			// Compute s = (k^-1 * (hash(message) - x*r)) mod (p-1)
+			hash := sha256.Sum256(message)
+			hashInt := new(big.Int).SetBytes(hash[:])
+
+			// Ensure kInv is not zero
+			kInv := new(big.Int).ModInverse(k, new(big.Int).Sub(privateKey.P, big.NewInt(1)))
+			if kInv == nil {
+				return "", "", errors.New("failed to calculate modular inverse: k is not invertible")
+			}
+
+			sBigInt := new(big.Int).Mul(kInv, new(big.Int).Sub(hashInt, new(big.Int).Mul(privateKey.X, rBigInt)))
+			sBigInt.Mod(sBigInt, new(big.Int).Sub(privateKey.P, big.NewInt(1)))
+			s = fmt.Sprintf("%X", sBigInt)
+
+			return fmt.Sprintf("%x", rBigInt), fmt.Sprintf("%x", sBigInt), nil
+		}
+	}
+}
+
+// Verify ElGamal signature
+func verifyElGamal(publicKey *PublicKey, message []byte, rHex, sHex string) bool {
+	// Convert r and s from hex to big integers
+	r, ok := new(big.Int).SetString(rHex, 16)
+	if !ok {
+		fmt.Println("Error converting r string to big.Int")
+		return false
+	}
+
+	s, ok := new(big.Int).SetString(sHex, 16)
+	if !ok {
+		fmt.Println("Error converting s string to big.Int")
+		return false
+	}
+
+	// Check if r and s are in the range [1, p-1]
+	if r.Cmp(big.NewInt(1)) == -1 || r.Cmp(new(big.Int).Sub(publicKey.P, big.NewInt(1))) == 1 {
+		return false
+	}
+	if s.Cmp(big.NewInt(1)) == -1 || s.Cmp(new(big.Int).Sub(publicKey.P, big.NewInt(1))) == 1 {
+		return false
+	}
+
+	// Compute g^hash(message) mod p
+	hash := sha256.Sum256(message)
+	hashInt := new(big.Int).SetBytes(hash[:])
+	ghash := new(big.Int).Exp(publicKey.G, hashInt, publicKey.P)
+
+	// Compute y^r * r^s mod p
+	yr := new(big.Int).Exp(publicKey.Y, r, publicKey.P)
+	rs := new(big.Int).Exp(r, s, publicKey.P)
+	yrrs := new(big.Int).Mul(yr, rs)
+	yrrs.Mod(yrrs, publicKey.P)
+
+	// Check if g^hash(message) == y^r * r^s mod p
+	return ghash.Cmp(yrrs) == 0
 }
 
 func savePrivateKeyToPEM(fileName string, privKey *PrivateKey) error {
