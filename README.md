@@ -13,6 +13,8 @@ Usage of elgamal:
         Public or private key, depending on operation.
   -keygen
         Generate asymmetric keypair.
+  -modulus
+        Display the public key modulus.
   -params string
         ElGamal public parameters path.
   -pass string
@@ -21,12 +23,20 @@ Usage of elgamal:
         Private key path. (default "Private.pem")
   -pub string
         Public key path. (default "Public.pem")
+  -rsign string
+        Signature R.
   -setup
         Generate public params.
+  -sign
+        Sign message with private key.
+  -signature string
+        Signature S.
   -text
         Print keys contents.
   -unwrapkey
         Unwrap symmetric key with private key.
+  -verify
+        Verify signature with public key.
   -wrapkey
         Wrap symmetric key with public key.
 ```
@@ -47,6 +57,14 @@ go run elgamal.go -wrapkey -key Public.pem
 - **Unwrap a Symmetric Key**
 ```
 go run elgamal.go -unwrapkey -key Private.pem [-pass <passphrase>] -cipher <ciphertext>
+```
+- **Sign a Message**
+```
+go run elgamal.go -sign -key Private.pem [-pass <passphrase>] <inputfile>
+```
+- **Verify Signature**
+```
+go run elgamal.go -verify -key Public.pem -rsign <r> -signature <s> <inputfile>
 ```
 - **Display Key Contents**
 ```
