@@ -716,6 +716,7 @@ func generatePrime(length int) (*big.Int, error) {
 	}
 }
 
+// generateSchnorrGroup generates a Schnorr Group with a 256-bit order.
 func generateSchnorrGroup() (*SchnorrParams, error) {
 	// Desired size for q (order)
 	qSize := *length - 1
