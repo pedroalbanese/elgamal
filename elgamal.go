@@ -32,9 +32,8 @@ var (
 	priv       = flag.String("priv", "Private.pem", "Private key path.")
 	pub        = flag.String("pub", "Public.pem", "Public key path.")
 	pwd        = flag.String("pass", "", "Passphrase. (for Private key PEM encryption)")
-	sig        = flag.String("signature", "", "Signature S.")
+	sig        = flag.String("signature", "", "Signature.")
 	sign       = flag.Bool("sign", false, "Sign message with private key.")
-	sigr       = flag.String("rsign", "", "Signature R.")
 	text       = flag.Bool("text", false, "Print keys contents.")
 	unwrapkey  = flag.Bool("unwrapkey", false, "Unwrap symmetric key with private key.")
 	verify     = flag.Bool("verify", false, "Verify signature with public key.")
@@ -51,9 +50,13 @@ func main() {
 		os.Exit(3)
 	}
 
-	inputfile, err := os.Open(flag.Arg(0))
-	if err != nil {
-		log.Fatalf("failed opening file: %s", err)
+	var inputfile io.Reader
+	var err error
+	if *sign || *verify {
+		inputfile, err = os.Open(flag.Arg(0))
+		if err != nil {
+			log.Fatalf("failed opening file: %s", err)
+		}
 	}
 
 	if *paramgen {
@@ -218,7 +221,6 @@ func main() {
 		fmt.Printf("Shared= %x\n", messageBytes)
 		os.Exit(0)
 	}
-
 	if *unwrapkey {
 		if *key == "" {
 			fmt.Println("Error: Private key file not provided for unwrapping.")
@@ -239,7 +241,6 @@ func main() {
 		}
 		fmt.Printf("Shared= %x\n", message)
 	}
-
 	if *text {
 		readParams, err := readSchnorrParamsFromPEM(*params)
 		if err != nil {
@@ -274,7 +275,6 @@ func main() {
 		}
 		os.Exit(0)
 	}
-
 	if *keygen {
 		var xval *big.Int
 		var path string
@@ -335,14 +335,13 @@ func main() {
 			return
 		}
 
-		r, s, err := signElGamal(priv, message)
+		sign, err := signElGamal(priv, message)
 		if err != nil {
 			log.Fatal("Error signing message:", err)
 			return
 		}
 
-		fmt.Println("R=", r)
-		fmt.Println("S=", s)
+		fmt.Println("Sign=", sign)
 	}
 	if *verify {
 		message, err := ioutil.ReadAll(inputfile)
@@ -356,9 +355,6 @@ func main() {
 			return
 		}
 
-		r := *sigr
-		s := *sig
-
 		publicKeyVal, err := readPublicKeyFromPEM(*key)
 		if err != nil {
 			fmt.Println("Error: Invalid public key value")
@@ -371,7 +367,7 @@ func main() {
 			Y: publicKeyVal.Y,
 		}
 
-		isValid := verifyElGamal(pub, message, r, s)
+		isValid := verifyElGamal(pub, message, *sig)
 		fmt.Println("Signature verification:", isValid)
 	}
 }
@@ -438,13 +434,13 @@ func decrypt(priv *PrivateKey, ciphertext string) (msg []byte, err error) {
 	return em, nil
 }
 
-// Sign a message using ElGamal
-func signElGamal(privateKey *PrivateKey, message []byte) (r, s string, err error) {
+// Sign a message using ElGamal with a specified hash function
+func signElGamal(privateKey *PrivateKey, message []byte) (signature string, err error) {
 	for {
 		// Choose a random value k in the range [1, p-2]
 		k, err := rand.Int(rand.Reader, new(big.Int).Sub(privateKey.P, big.NewInt(2)))
 		if err != nil {
-			return "", "", fmt.Errorf("failed to generate random number: %v", err)
+			return "", fmt.Errorf("failed to generate random number: %v", err)
 		}
 
 		// Ensure k is not zero
@@ -457,43 +453,61 @@ func signElGamal(privateKey *PrivateKey, message []byte) (r, s string, err error
 			// Compute r = g^k mod p
 			rBigInt := new(big.Int).Exp(privateKey.G, k, privateKey.P)
 			rBigInt.Mod(rBigInt, privateKey.P)
-			r = fmt.Sprintf("%X", rBigInt)
+			rHex := fmt.Sprintf("%x", rBigInt)
 
-			// Compute s = (k^-1 * (hash(message) - x*r)) mod (p-1)
+			// Compute hash of the message using the specified hash function
 			hash := sha256.Sum256(message)
 			hashInt := new(big.Int).SetBytes(hash[:])
 
 			// Ensure kInv is not zero
 			kInv := new(big.Int).ModInverse(k, new(big.Int).Sub(privateKey.P, big.NewInt(1)))
 			if kInv == nil {
-				return "", "", errors.New("failed to calculate modular inverse: k is not invertible")
+				return "", errors.New("failed to calculate modular inverse: k is not invertible")
 			}
 
+			// Compute s = (k^-1 * (hash(message) - x*r)) mod (p-1)
 			sBigInt := new(big.Int).Mul(kInv, new(big.Int).Sub(hashInt, new(big.Int).Mul(privateKey.X, rBigInt)))
 			sBigInt.Mod(sBigInt, new(big.Int).Sub(privateKey.P, big.NewInt(1)))
-			s = fmt.Sprintf("%X", sBigInt)
+			sHex := fmt.Sprintf("%x", sBigInt)
 
-			return fmt.Sprintf("%x", rBigInt), fmt.Sprintf("%x", sBigInt), nil
+			// Ensure R and S have the same length as P by padding with zeros
+			rHex = strings.TrimLeft(rHex, "0")
+			sHex = strings.TrimLeft(sHex, "0")
+			paddingLen := len(fmt.Sprintf("%x", privateKey.P))
+			rPadded := fmt.Sprintf("%0*s", paddingLen, rHex)
+			sPadded := fmt.Sprintf("%0*s", paddingLen, sHex)
+
+			signature = rPadded + sPadded
+			return signature, nil
 		}
 	}
 }
 
-// Verify ElGamal signature
-func verifyElGamal(publicKey *PublicKey, message []byte, rHex, sHex string) bool {
-	// Convert r and s from hex to big integers
+// Verify ElGamal signature with a specified hash function
+func verifyElGamal(publicKey *PublicKey, message []byte, signature string) bool {
+	// Determine the length of P and extract R and S from the signature
+	pLength := len(fmt.Sprintf("%X", publicKey.P))
+	if len(signature) != 2*pLength {
+		return false
+	}
+
+	rHex := signature[:pLength]
+	sHex := signature[pLength:]
+
+	// Convert R and S from hex to big integers
 	r, ok := new(big.Int).SetString(rHex, 16)
 	if !ok {
-		fmt.Println("Error converting r string to big.Int")
+		fmt.Println("Error converting R string to big.Int")
 		return false
 	}
 
 	s, ok := new(big.Int).SetString(sHex, 16)
 	if !ok {
-		fmt.Println("Error converting s string to big.Int")
+		fmt.Println("Error converting S string to big.Int")
 		return false
 	}
 
-	// Check if r and s are in the range [1, p-1]
+	// Check if R and S are in the range [1, p-1]
 	if r.Cmp(big.NewInt(1)) == -1 || r.Cmp(new(big.Int).Sub(publicKey.P, big.NewInt(1))) == 1 {
 		return false
 	}
@@ -501,7 +515,7 @@ func verifyElGamal(publicKey *PublicKey, message []byte, rHex, sHex string) bool
 		return false
 	}
 
-	// Compute g^hash(message) mod p
+	// Compute g^hash(message) mod p using the specified hash function
 	hash := sha256.Sum256(message)
 	hashInt := new(big.Int).SetBytes(hash[:])
 	ghash := new(big.Int).Exp(publicKey.G, hashInt, publicKey.P)
@@ -716,7 +730,6 @@ func generatePrime(length int) (*big.Int, error) {
 	}
 }
 
-// generateSchnorrGroup generates a Schnorr Group with a 256-bit order.
 func generateSchnorrGroup() (*SchnorrParams, error) {
 	// Desired size for q (order)
 	qSize := *length - 1
