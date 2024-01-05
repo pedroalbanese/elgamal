@@ -23,14 +23,12 @@ Usage of elgamal:
         Private key path. (default "Private.pem")
   -pub string
         Public key path. (default "Public.pem")
-  -rsign string
-        Signature R.
   -setup
         Generate public params.
   -sign
         Sign message with private key.
   -signature string
-        Signature S.
+        Signature.
   -text
         Print keys contents.
   -unwrapkey
