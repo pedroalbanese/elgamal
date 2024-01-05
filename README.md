@@ -62,7 +62,7 @@ go run elgamal.go -sign -key Private.pem [-pass <passphrase>] <inputfile>
 ```
 - **Verify Signature**
 ```
-go run elgamal.go -verify -key Public.pem -rsign <r> -signature <s> <inputfile>
+go run elgamal.go -verify -key Public.pem -signature <sign> <inputfile>
 ```
 - **Display Key Contents**
 ```
